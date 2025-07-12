@@ -137,6 +137,7 @@ func TestNewReadDirIter(t *testing.T) {
 		name          string
 		mockFile      *mockReadDirFile
 		n             int
+		breakAfter    int
 		expectedNames []string
 		expectedErr   error
 	}{
@@ -150,6 +151,7 @@ func TestNewReadDirIter(t *testing.T) {
 				},
 			},
 			n:             0,
+			breakAfter:    -1,
 			expectedNames: []string{"file1", "file2", "dir1"},
 			expectedErr:   nil,
 		},
@@ -159,7 +161,22 @@ func TestNewReadDirIter(t *testing.T) {
 				entries: []fs.DirEntry{},
 			},
 			n:             0,
+			breakAfter:    -1,
 			expectedNames: []string{},
+			expectedErr:   nil,
+		},
+		{
+			name: "n=0_break",
+			mockFile: &mockReadDirFile{
+				entries: []fs.DirEntry{
+					mockDirEntry{name: "file1"},
+					mockDirEntry{name: "file2"},
+					mockDirEntry{name: "dir1", isDir: true},
+				},
+			},
+			n:             0,
+			breakAfter:    1,
+			expectedNames: []string{"file1", "file2"},
 			expectedErr:   nil,
 		},
 		{
@@ -168,6 +185,7 @@ func TestNewReadDirIter(t *testing.T) {
 				errOnCall: errors.New("permission denied"),
 			},
 			n:             0,
+			breakAfter:    -1,
 			expectedNames: []string{},
 			expectedErr:   errors.New("permission denied"),
 		},
@@ -183,7 +201,24 @@ func TestNewReadDirIter(t *testing.T) {
 				},
 			},
 			n:             2,
+			breakAfter:    -1,
 			expectedNames: []string{"a.txt", "b.txt", "c.txt", "d.txt", "e.txt"},
+			expectedErr:   nil,
+		},
+		{
+			name: "n>0_break",
+			mockFile: &mockReadDirFile{
+				entries: []fs.DirEntry{
+					mockDirEntry{name: "a.txt"},
+					mockDirEntry{name: "b.txt"},
+					mockDirEntry{name: "c.txt"},
+					mockDirEntry{name: "d.txt"},
+					mockDirEntry{name: "e.txt"},
+				},
+			},
+			n:             2,
+			breakAfter:    2,
+			expectedNames: []string{"a.txt", "b.txt", "c.txt"},
 			expectedErr:   nil,
 		},
 		{
@@ -197,6 +232,7 @@ func TestNewReadDirIter(t *testing.T) {
 				},
 			},
 			n:             2,
+			breakAfter:    -1,
 			expectedNames: []string{"1.txt", "2.txt", "3.txt", "4.txt"},
 			expectedErr:   nil,
 		},
@@ -206,6 +242,7 @@ func TestNewReadDirIter(t *testing.T) {
 				entries: []fs.DirEntry{},
 			},
 			n:             5,
+			breakAfter:    -1,
 			expectedNames: []string{},
 			expectedErr:   nil,
 		},
@@ -219,6 +256,7 @@ func TestNewReadDirIter(t *testing.T) {
 				errOnCall: errors.New("disk full"), // Error on the first ReadDir call
 			},
 			n:             1,
+			breakAfter:    -1,
 			expectedNames: []string{}, // No entries should be returned if an error occurs
 			expectedErr:   errors.New("disk full"),
 		},
@@ -232,6 +270,7 @@ func TestNewReadDirIter(t *testing.T) {
 				eofAfterN: 2, // Return EOF after 2nd ReadDir call
 			},
 			n:             1,
+			breakAfter:    -1,
 			expectedNames: []string{"end1", "end2"},
 			expectedErr:   nil,
 		},
@@ -242,6 +281,7 @@ func TestNewReadDirIter(t *testing.T) {
 				eofAfterN: 0, // EOF on the very first call
 			},
 			n:             1,
+			breakAfter:    -1,
 			expectedNames: []string{},
 			expectedErr:   nil,
 		},
@@ -254,12 +294,17 @@ func TestNewReadDirIter(t *testing.T) {
 			var actualNames []string
 			var actualErr error
 			// Iterate through the sequence returned by NewReadDirIter
+			i := 0
 			for entry, err := range iter {
 				if err != nil {
 					actualErr = err
 					break // Stop iteration on the first error
 				}
 				actualNames = append(actualNames, entry.Name())
+				if tt.breakAfter != -1 && i == tt.breakAfter {
+					break
+				}
+				i++
 			}
 
 			// Compare errors
