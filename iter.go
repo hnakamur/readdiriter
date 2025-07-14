@@ -1,3 +1,5 @@
+// Package readdiriter provides functions which return an iterator
+// over directory entries in the specified directory.
 package readdiriter
 
 import (
@@ -7,6 +9,10 @@ import (
 	"iter"
 )
 
+// NewReadDirIter returns an iterate over directory entries from the file
+// parameter.
+// The n parameter follows the semantics of fs.ReadDirFile:
+// https://pkg.go.dev/io/fs@latest#ReadDirFile.
 func NewReadDirIter(file fs.ReadDirFile, n int) iter.Seq2[fs.DirEntry, error] {
 	return func(yield func(fs.DirEntry, error) bool) {
 		if n <= 0 {

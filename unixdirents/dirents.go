@@ -1,3 +1,5 @@
+// Package unixdirents provides functions which returns a iterator
+// over directory entries in the specified directory on Unix platforms.
 package unixdirents
 
 import (
@@ -48,8 +50,8 @@ type DirentInfo struct {
 }
 
 // Dirents returns an iterator over directory entries within the specified file
-// descriptor (fd).
-// The provided buffer 'buf' is used for reading directory data.
+// descriptor fd.
+// The provided buffer buf is used for reading directory data.
 func Dirents(fd int, buf []byte) iter.Seq2[DirentInfo, error] {
 	return func(yield func(DirentInfo, error) bool) {
 		for {
