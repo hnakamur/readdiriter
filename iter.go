@@ -13,6 +13,8 @@ import (
 // parameter.
 // The n parameter follows the semantics of fs.ReadDirFile:
 // https://pkg.go.dev/io/fs@latest#ReadDirFile.
+//
+// Note: The directory entries are not in lexical order.
 func NewReadDirIter(file fs.ReadDirFile, n int) iter.Seq2[fs.DirEntry, error] {
 	return func(yield func(fs.DirEntry, error) bool) {
 		if n <= 0 {

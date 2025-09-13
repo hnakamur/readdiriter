@@ -52,6 +52,8 @@ type DirentInfo struct {
 // Dirents returns an iterator over directory entries within the specified file
 // descriptor fd.
 // The provided buffer buf is used for reading directory data.
+//
+// Note: The directory entries are not in lexical order.
 func Dirents(fd int, buf []byte) iter.Seq2[DirentInfo, error] {
 	return func(yield func(DirentInfo, error) bool) {
 		for {
