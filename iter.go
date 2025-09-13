@@ -17,20 +17,6 @@ import (
 // Note: The directory entries are not in lexical order.
 func NewReadDirIter(file fs.ReadDirFile, n int) iter.Seq2[fs.DirEntry, error] {
 	return func(yield func(fs.DirEntry, error) bool) {
-		if n <= 0 {
-			de, err := file.ReadDir(n)
-			if err != nil {
-				yield(nil, err)
-				return
-			}
-			for _, e := range de {
-				if !yield(e, nil) {
-					return
-				}
-			}
-			return
-		}
-
 		for {
 			de, err := file.ReadDir(n)
 			var seenEOF bool
