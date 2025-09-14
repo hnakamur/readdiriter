@@ -3,33 +3,70 @@ package readdiriter
 import (
 	"io/fs"
 	"iter"
-	"log/slog"
-	"os"
-	"path"
+	"path/filepath"
 )
 
-type OpenReadDirFileFunc func(name string) (fs.ReadDirFile, error)
+// ReadDirCloser is the interface that groups ReadDir and Close methods.
+type ReadDirCloser interface {
+	ReadDirer
+	Close() error
+}
 
-var _ = (fs.ReadDirFile)((*os.File)(nil))
+// OpenReadDirCloserFunc is the type of the function called by NewReadDirIterRecursive
+// to open each directory.
+type OpenReadDirCloserFunc func(name string) (ReadDirCloser, error)
 
-func NewReadDirIterRecursive(baseDir string, file fs.ReadDirFile, n int, openDir OpenReadDirFileFunc, skipDir *bool) iter.Seq2[fs.DirEntry, error] {
-	return func(yield func(fs.DirEntry, error) bool) {
-		walkDir(baseDir, file, n, yield, openDir, skipDir)
+// DirAndEntry is the struct that groups the directory and io/fs.DirEntry.
+type DirAndEntry struct {
+	dir   string
+	entry fs.DirEntry
+}
+
+// Dir returns the directory in a DirAndEntry struct.
+func (e *DirAndEntry) Dir() string {
+	return e.dir
+}
+
+// Entry returns the directory entry in a DirAndEntry struct.
+func (e *DirAndEntry) Entry() fs.DirEntry {
+	return e.entry
+}
+
+// NewReadDirIterRecursive returns an iterate over directory entries by walking
+// each directory in the tree, including baseDir.
+//
+// The n parameter follows the semantics of fs.ReadDirFile:
+// https://pkg.go.dev/io/fs@latest#ReadDirFile.
+//
+// Note: The directory entries are not in lexical order in each directory.
+func NewReadDirIterRecursive(baseDir string, openDir OpenReadDirCloserFunc, n int, skipDir *bool) iter.Seq2[*DirAndEntry, error] {
+	return func(yield func(*DirAndEntry, error) bool) {
+		walkDir(baseDir, openDir, n, skipDir, yield)
 	}
 }
 
-func walkDir(baseDir string, file fs.ReadDirFile, n int, yield func(fs.DirEntry, error) bool, openDir OpenReadDirFileFunc, skipDir *bool) {
-	slog.Info("walkDir start", "baseDir", baseDir)
-	defer slog.Info("walkDir exit", "baseDir", baseDir)
+func walkDir(baseDir string, openDir OpenReadDirCloserFunc, n int, skipDir *bool, yield func(*DirAndEntry, error) bool) {
+	dirFile, err := openDir(baseDir)
+	if err != nil {
+		yield(nil, err)
+		return
+	}
+	defer func() {
+		if err := dirFile.Close(); err != nil {
+			yield(nil, err)
+			return
+		}
+	}()
 
-	for entry, err := range NewReadDirIter(file, n) {
+	for entry, err := range NewReadDirIter(dirFile, n) {
 		if err != nil {
 			yield(nil, err)
 			return
 		}
-		slog.Info("walkDir entry", "baseDir", baseDir, "entryName", entry.Name(), "isDir", entry.IsDir())
-		basedEntry := newBasedDirEntry(baseDir, entry)
-		if !yield(basedEntry, nil) {
+		if !yield(&DirAndEntry{
+			dir:   baseDir,
+			entry: entry,
+		}, nil) {
 			return
 		}
 		if entry.IsDir() {
@@ -38,47 +75,8 @@ func walkDir(baseDir string, file fs.ReadDirFile, n int, yield func(fs.DirEntry,
 				continue
 			}
 
-			dirPath := basedEntry.Name()
-			dirFile, err := openDir(dirPath)
-			if err != nil {
-				yield(nil, err)
-				return
-			}
-			slog.Info("opened dir", "dirPath", dirPath)
-			defer slog.Info("closed dir", "dirPath", dirPath)
-			defer dirFile.Close()
-
-			walkDir(dirPath, dirFile, n, yield, openDir, skipDir)
+			subDir := filepath.Join(baseDir, entry.Name())
+			walkDir(subDir, openDir, n, skipDir, yield)
 		}
 	}
-}
-
-type basedDirEntry struct {
-	base     string
-	dirEntry fs.DirEntry
-}
-
-var _ = (fs.DirEntry)((*basedDirEntry)(nil))
-
-func newBasedDirEntry(base string, dirEntry fs.DirEntry) *basedDirEntry {
-	return &basedDirEntry{
-		base:     base,
-		dirEntry: dirEntry,
-	}
-}
-
-func (e *basedDirEntry) Name() string {
-	return path.Join(e.base, e.dirEntry.Name())
-}
-
-func (e *basedDirEntry) IsDir() bool {
-	return e.dirEntry.IsDir()
-}
-
-func (e *basedDirEntry) Type() fs.FileMode {
-	return e.dirEntry.Type()
-}
-
-func (e *basedDirEntry) Info() (fs.FileInfo, error) {
-	return e.dirEntry.Info()
 }

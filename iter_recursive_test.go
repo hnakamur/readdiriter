@@ -2,87 +2,144 @@ package readdiriter
 
 import (
 	"flag"
-	"io/fs"
-	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"testing"
 )
 
 func TestNewReadDirIterRecursive(t *testing.T) {
-	dir := tempDir(t)
-	t.Logf("dir=%s", dir)
+	t.Run("noSkip", func(t *testing.T) {
+		dir := tempDir(t)
 
-	inputDirs := [][]string{
-		{"a"},
-		{"a", "b"},
-		{"a", "b", "c"},
-		{"a", "d"},
-	}
-	inputFiles := [][]string{
-		{"a", "f1"},
-		{"a", "f2"},
-		{"a", "b", "c", "f2"},
-	}
-
-	wantDirs := make([]string, len(inputDirs))
-	for i, inputDir := range inputDirs {
-		dirPath := filepath.Join(append([]string{dir}, inputDir...)...)
-		if err := os.Mkdir(dirPath, 0o700); err != nil {
-			t.Fatal(err)
+		inputDirs := []string{
+			"a",
+			filepath.Join("a", "b"),
+			filepath.Join("a", "b", "c"),
+			filepath.Join("a", "d"),
 		}
-		t.Logf("cretaed dir=%s", dirPath)
-		wantDirs[i] = dirPath
-	}
-	slices.Sort(wantDirs)
-
-	wantFiles := make([]string, len(inputFiles))
-	for i, inputFile := range inputFiles {
-		filePath := filepath.Join(append([]string{dir}, inputFile...)...)
-		if err := os.WriteFile(filePath, nil, 0o600); err != nil {
-			t.Fatal(err)
+		inputFiles := []string{
+			filepath.Join("a", "f1"),
+			filepath.Join("a", "f2"),
+			filepath.Join("a", "b", "c", "f2"),
 		}
-		t.Logf("cretaed file=%s", filePath)
-		wantFiles[i] = filePath
-	}
-	slices.Sort(wantFiles)
 
-	dirFile, err := os.Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer dirFile.Close()
-
-	openDir := func(name string) (fs.ReadDirFile, error) {
-		return os.Open(name)
-	}
-
-	var gotDirs, gotFiles []string
-	for de, err := range NewReadDirIterRecursive(dir, dirFile, 0, openDir, nil) {
-		if err != nil {
-			t.Fatal(err)
+		wantDirs := make([]string, len(inputDirs))
+		for i, inputDir := range inputDirs {
+			dirPath := filepath.Join(dir, inputDir)
+			if err := os.Mkdir(dirPath, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			wantDirs[i] = dirPath
 		}
-		relPath, err := filepath.Rel(dir, de.Name())
-		if err != nil {
-			t.Fatal(err)
-		}
-		slog.Info("NewReadDirIterRecursive loop", "de.Name()", de.Name(), "isDir", de.IsDir(), "relPath", relPath)
-		if de.IsDir() {
-			gotDirs = append(gotDirs, de.Name())
-		} else {
-			gotFiles = append(gotFiles, de.Name())
-		}
-	}
-	slices.Sort(gotDirs)
-	slices.Sort(gotFiles)
+		slices.Sort(wantDirs)
 
-	if !slices.Equal(gotDirs, wantDirs) {
-		t.Errorf("dirs mismatch,\n got=%v,\nwant=%v", gotDirs, wantDirs)
-	}
-	if !slices.Equal(gotFiles, wantFiles) {
-		t.Errorf("files mismatch,\n got=%v,\nwant=%v", gotFiles, wantFiles)
-	}
+		wantFiles := make([]string, len(inputFiles))
+		for i, inputFile := range inputFiles {
+			filePath := filepath.Join(dir, inputFile)
+			if err := os.WriteFile(filePath, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			wantFiles[i] = filePath
+		}
+		slices.Sort(wantFiles)
+
+		openDir := func(name string) (ReadDirCloser, error) {
+			return os.Open(name)
+		}
+		var gotDirs, gotFiles []string
+		for de, err := range NewReadDirIterRecursive(dir, openDir, 0, nil) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			dePath := path.Join(de.Dir(), de.Entry().Name())
+			if de.Entry().IsDir() {
+				gotDirs = append(gotDirs, dePath)
+			} else {
+				gotFiles = append(gotFiles, dePath)
+			}
+		}
+		slices.Sort(gotDirs)
+		slices.Sort(gotFiles)
+
+		if !slices.Equal(gotDirs, wantDirs) {
+			t.Errorf("dirs mismatch,\n got=%v,\nwant=%v", gotDirs, wantDirs)
+		}
+		if !slices.Equal(gotFiles, wantFiles) {
+			t.Errorf("files mismatch,\n got=%v,\nwant=%v", gotFiles, wantFiles)
+		}
+	})
+	t.Run("skip", func(t *testing.T) {
+		dir := tempDir(t)
+
+		inputDirs := []string{
+			"a",
+			filepath.Join("a", "b"),
+			filepath.Join("a", "b", "c"),
+			filepath.Join("a", "d"),
+		}
+		inputFiles := []string{
+			filepath.Join("a", "f1"),
+			filepath.Join("a", "f2"),
+			filepath.Join("a", "b", "c", "f2"),
+		}
+
+		wantDirs := []string{
+			filepath.Join(dir, "a"),
+			filepath.Join(dir, "a", "d"),
+		}
+		slices.Sort(wantDirs)
+		wantFiles := []string{
+			filepath.Join(dir, "a", "f1"),
+			filepath.Join(dir, "a", "f2"),
+		}
+		slices.Sort(wantFiles)
+
+		for _, inputDir := range inputDirs {
+			dirPath := filepath.Join(dir, inputDir)
+			if err := os.Mkdir(dirPath, 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		for _, inputFile := range inputFiles {
+			filePath := filepath.Join(dir, inputFile)
+			if err := os.WriteFile(filePath, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		openDir := func(name string) (ReadDirCloser, error) {
+			return os.Open(name)
+		}
+		skipDir := false
+		var gotDirs, gotFiles []string
+		for de, err := range NewReadDirIterRecursive(dir, openDir, 0, &skipDir) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			dePath := path.Join(de.Dir(), de.Entry().Name())
+			if de.Entry().IsDir() {
+				if dePath == filepath.Join(dir, "a", "b") {
+					skipDir = true
+					continue
+				}
+				gotDirs = append(gotDirs, dePath)
+			} else {
+				gotFiles = append(gotFiles, dePath)
+			}
+		}
+		slices.Sort(gotDirs)
+		slices.Sort(gotFiles)
+
+		if !slices.Equal(gotDirs, wantDirs) {
+			t.Errorf("dirs mismatch,\n got=%v,\nwant=%v", gotDirs, wantDirs)
+		}
+		if !slices.Equal(gotFiles, wantFiles) {
+			t.Errorf("files mismatch,\n got=%v,\nwant=%v", gotFiles, wantFiles)
+		}
+	})
 }
 
 var keepTempDir = flag.Bool("keep-temp-dir", false, "Whether to keep temporary directory")

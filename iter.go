@@ -9,13 +9,19 @@ import (
 	"iter"
 )
 
+// ReadDirer is the interface that wraps the ReadDir method in io/fs.ReadDirFile
+// interface.
+type ReadDirer interface {
+	ReadDir(n int) ([]fs.DirEntry, error)
+}
+
 // NewReadDirIter returns an iterate over directory entries from the file
 // parameter.
 // The n parameter follows the semantics of fs.ReadDirFile:
 // https://pkg.go.dev/io/fs@latest#ReadDirFile.
 //
 // Note: The directory entries are not in lexical order.
-func NewReadDirIter(file fs.ReadDirFile, n int) iter.Seq2[fs.DirEntry, error] {
+func NewReadDirIter(file ReadDirer, n int) iter.Seq2[fs.DirEntry, error] {
 	return func(yield func(fs.DirEntry, error) bool) {
 		for {
 			de, err := file.ReadDir(n)
