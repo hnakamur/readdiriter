@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"os"
 	"testing"
 )
 
@@ -330,5 +331,32 @@ func TestNewReadDirIter(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestNewReadDirIterEmpty(t *testing.T) {
+	dir := t.TempDir()
+
+	dirFile, err := os.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dirFile.Close()
+
+	testCases := []int{
+		0,
+		1,
+	}
+	for _, n := range testCases {
+		var got int
+		for _, err := range NewReadDirIter(dirFile, n) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			got++
+		}
+		if want := 0; got != want {
+			t.Errorf("count mismatch, n=%d, got=%v, want=%v", n, got, want)
+		}
 	}
 }

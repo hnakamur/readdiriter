@@ -32,7 +32,7 @@ func NewReadDirIter(file fs.ReadDirFile, n int) iter.Seq2[fs.DirEntry, error] {
 					return
 				}
 			}
-			if seenEOF {
+			if seenEOF || (n == 0 && len(de) == 0) {
 				return
 			}
 		}
